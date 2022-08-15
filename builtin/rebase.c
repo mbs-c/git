@@ -865,13 +865,9 @@ static int can_fast_forward(struct commit *onto, struct commit *upstream,
 	struct commit_list *merge_bases = NULL;
 	int res = 0;
 
-	merge_bases = get_merge_bases(onto, head);
-	if (!merge_bases || merge_bases->next) {
-		oidcpy(merge_base, null_oid());
+	if (is_null_oid(merge_base))
 		goto done;
-	}
 
-	oidcpy(merge_base, &merge_bases->item->object.oid);
 	if (!oideq(merge_base, &onto->object.oid))
 		goto done;
 
@@ -894,6 +890,20 @@ static int can_fast_forward(struct commit *onto, struct commit *upstream,
 done:
 	free_commit_list(merge_bases);
 	return res && is_linear_history(onto, head);
+}
+
+static void fill_merge_base(struct rebase_options *options,
+			    struct object_id *merge_base)
+{
+	struct commit_list *merge_bases = NULL;
+
+	merge_bases = get_merge_bases(options->onto, options->orig_head);
+	if (!merge_bases || merge_bases->next)
+		oidcpy(merge_base, null_oid());
+	else
+		oidcpy(merge_base, &merge_bases->item->object.oid);
+
+	free_commit_list(merge_bases);
 }
 
 static int parse_opt_am(const struct option *opt, const char *arg, int unset)
@@ -1659,7 +1669,11 @@ int cmd_rebase(int argc, const char **argv, const char *prefix)
 			die(_("Does not point to a valid commit '%s'"),
 				options.onto_name);
 	}
-
+	if (keep_base) {
+		oidcpy(&merge_base, &options.onto->object.oid);
+	} else {
+		fill_merge_base(&options, &merge_base);
+	}
 	if (options.fork_point > 0)
 		options.restrict_revision =
 			get_fork_point(options.upstream_name, options.orig_head);
@@ -1688,13 +1702,10 @@ int cmd_rebase(int argc, const char **argv, const char *prefix)
 	 * Check if we are already based on onto with linear history,
 	 * in which case we could fast-forward without replacing the commits
 	 * with new commits recreated by replaying their changes.
-	 *
-	 * Note that can_fast_forward() initializes merge_base, so we have to
-	 * call it before checking allow_preemptive_ff.
 	 */
-	if (can_fast_forward(options.onto, options.upstream, options.restrict_revision,
-		    options.orig_head, &merge_base) &&
-	    allow_preemptive_ff) {
+	if (allow_preemptive_ff &&
+	    can_fast_forward(options.onto, options.upstream, options.restrict_revision,
+			     options.orig_head, &merge_base)) {
 		int flag;
 
 		if (!(options.flags & REBASE_FORCE)) {
