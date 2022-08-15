@@ -1231,6 +1231,12 @@ int cmd_rebase(int argc, const char **argv, const char *prefix)
 			die(_("options '%s' and '%s' cannot be used together"), "--keep-base", "--onto");
 		if (options.root)
 			die(_("options '%s' and '%s' cannot be used together"), "--keep-base", "--root");
+		/*
+		 * --keep-base ignores config.forkPoint as it is confusing if
+		 * the branch base changes when using this option.
+		 */
+		if (options.fork_point < 0)
+			options.fork_point = 0;
 	}
 	/*
 	 * --keep-base defaults to --reapply-cherry-picks as it is confusing if
