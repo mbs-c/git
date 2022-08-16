@@ -79,8 +79,10 @@ test_expect_success 'rebase -i --onto main...topic' '
 	git reset --hard &&
 	git checkout topic &&
 	git reset --hard G &&
-	set_fake_editor &&
-	EXPECT_COUNT=1 git rebase -i --onto main...topic F &&
+	(
+		set_fake_editor &&
+		EXPECT_COUNT=1 git rebase -i --onto main...topic F
+	) &&
 	git rev-parse HEAD^1 >actual &&
 	git rev-parse C^0 >expect &&
 	test_cmp expect actual
@@ -90,8 +92,10 @@ test_expect_success 'rebase -i --onto main...' '
 	git reset --hard &&
 	git checkout topic &&
 	git reset --hard G &&
-	set_fake_editor &&
-	EXPECT_COUNT=1 git rebase -i --onto main... F &&
+	(
+		set_fake_editor &&
+		EXPECT_COUNT=1 git rebase -i --onto main... F
+	) &&
 	git rev-parse HEAD^1 >actual &&
 	git rev-parse C^0 >expect &&
 	test_cmp expect actual
@@ -102,7 +106,6 @@ test_expect_success 'rebase -i --onto main...side' '
 	git checkout side &&
 	git reset --hard K &&
 
-	set_fake_editor &&
 	test_must_fail git rebase -i --onto main...side J
 '
 
@@ -156,8 +159,10 @@ test_expect_success 'rebase -i --keep-base main from topic' '
 	git checkout topic &&
 	git reset --hard G &&
 
-	set_fake_editor &&
-	EXPECT_COUNT=2 git rebase -i --keep-base main &&
+	(
+		set_fake_editor &&
+		EXPECT_COUNT=2 git rebase -i --keep-base main
+	) &&
 	git rev-parse C >base.expect &&
 	git merge-base main HEAD >base.actual &&
 	test_cmp base.expect base.actual &&
@@ -171,8 +176,10 @@ test_expect_success 'rebase -i --keep-base main topic from main' '
 	git checkout main &&
 	git branch -f topic G &&
 
-	set_fake_editor &&
-	EXPECT_COUNT=2 git rebase -i --keep-base main topic &&
+	(
+		set_fake_editor &&
+		EXPECT_COUNT=2 git rebase -i --keep-base main topic
+	) &&
 	git rev-parse C >base.expect &&
 	git merge-base main HEAD >base.actual &&
 	test_cmp base.expect base.actual &&
@@ -187,8 +194,33 @@ test_expect_success 'rebase -i --keep-base main from side' '
 	git checkout side &&
 	git reset --hard K &&
 
-	set_fake_editor &&
 	test_must_fail git rebase -i --keep-base main
+'
+
+test_expect_success 'rebase --keep-base keeps cherry picks' '
+	git checkout -f -B main E &&
+	git cherry-pick F &&
+	(
+		set_fake_editor &&
+		EXPECT_COUNT=2 git rebase -i --keep-base HEAD G
+	) &&
+	test_cmp_rev HEAD G
+'
+
+test_expect_success 'rebase --keep-base --no-reapply-cherry-picks' '
+	git checkout -f -B main E &&
+	git cherry-pick F &&
+	(
+		set_fake_editor &&
+		EXPECT_COUNT=1 git rebase -i --keep-base \
+					--no-reapply-cherry-picks HEAD G
+	) &&
+	test_cmp_rev HEAD^ C
+'
+
+# This must be the last test in this file
+test_expect_success '$EDITOR and friends are unchanged' '
+	test_editor_unchanged
 '
 
 test_done
