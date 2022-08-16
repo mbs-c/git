@@ -272,6 +272,33 @@ static int start_fsmonitor_daemon(void)
 	return res;
 }
 
+static int stop_fsmonitor_daemon(void)
+{
+	int res = 0;
+	if (fsmonitor_ipc__is_supported()) {
+		struct strbuf err = STRBUF_INIT;
+		struct child_process cp = CHILD_PROCESS_INIT;
+
+		/* Try to stop the FSMonitor daemon */
+		cp.git_cmd = 1;
+		strvec_pushl(&cp.args, "fsmonitor--daemon", "stop", NULL);
+		if (!pipe_command(&cp, NULL, 0, NULL, 0, &err, 0)) {
+			/* Successfully stopped FSMonitor */
+			strbuf_release(&err);
+			return 0;
+		}
+
+		/* If FSMonitor really hasn't stopped, emit error */
+		if (fsmonitor_ipc__get_state() == IPC_STATE__LISTENING)
+			res = error(_("could not stop the FSMonitor daemon: %s"),
+				    err.buf);
+
+		strbuf_release(&err);
+	}
+
+	return res;
+}
+
 static int register_dir(void)
 {
 	int res = add_or_remove_enlistment(1);
@@ -296,6 +323,9 @@ static int unregister_dir(void)
 		res = -1;
 
 	if (add_or_remove_enlistment(0) < 0)
+		res = -1;
+
+	if (stop_fsmonitor_daemon() < 0)
 		res = -1;
 
 	return res;
