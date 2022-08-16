@@ -4507,6 +4507,8 @@ static void format_submodule_conflict_suggestion(struct strbuf *msg) {
 	}
 	strbuf_reset(msg);
 	strbuf_add(msg, tmp.buf, tmp.len);
+	string_list_clear(&msg_list, 0);
+	strbuf_release(&tmp);
 }
 
 static void print_submodule_conflict_suggestion(struct string_list *csub) {
