@@ -7,6 +7,8 @@
 #include "parse-options.h"
 #include "config.h"
 #include "run-command.h"
+#include "simple-ipc.h"
+#include "fsmonitor-ipc.h"
 #include "refs.h"
 #include "dir.h"
 #include "packfile.h"
@@ -169,6 +171,12 @@ static int set_recommended_config(int reconfigure)
 		{ "core.autoCRLF", "false" },
 		{ "core.safeCRLF", "false" },
 		{ "fetch.showForcedUpdates", "false" },
+#ifdef HAVE_FSMONITOR_DAEMON_BACKEND
+		/*
+		 * Enable the built-in FSMonitor on supported platforms.
+		 */
+		{ "core.fsmonitor", "true" },
+#endif
 		{ NULL, NULL },
 	};
 	int i;
@@ -236,6 +244,34 @@ static int add_or_remove_enlistment(int add)
 		       "scalar.repo", the_repository->worktree, NULL);
 }
 
+static int start_fsmonitor_daemon(void)
+{
+	int res = 0;
+	if (fsmonitor_ipc__is_supported() &&
+	    fsmonitor_ipc__get_state() != IPC_STATE__LISTENING) {
+		struct strbuf err = STRBUF_INIT;
+		struct child_process cp = CHILD_PROCESS_INIT;
+
+		/* Try to start the FSMonitor daemon */
+		cp.git_cmd = 1;
+		strvec_pushl(&cp.args, "fsmonitor--daemon", "start", NULL);
+		if (!pipe_command(&cp, NULL, 0, NULL, 0, &err, 0)) {
+			/* Successfully started FSMonitor */
+			strbuf_release(&err);
+			return 0;
+		}
+
+		/* If FSMonitor really hasn't started, emit error */
+		if (fsmonitor_ipc__get_state() != IPC_STATE__LISTENING)
+			res = error(_("could not start the FSMonitor daemon: %s"),
+				    err.buf);
+
+		strbuf_release(&err);
+	}
+
+	return res;
+}
+
 static int register_dir(void)
 {
 	int res = add_or_remove_enlistment(1);
@@ -245,6 +281,9 @@ static int register_dir(void)
 
 	if (!res)
 		res = toggle_maintenance(1);
+
+	if (!res)
+		res = start_fsmonitor_daemon();
 
 	return res;
 }
